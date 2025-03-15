@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Business, Review } from '../types';
+import { Business, Review, LocationFilter, BusinessCreate } from '../types';
 
 const API_URL = 'http://localhost:5000/api';
 
@@ -8,9 +8,21 @@ export const api = axios.create({
 });
 
 export const businessApi = {
-  // Get all businesses
-  getAll: async () => {
-    const response = await api.get<Business[]>('/businesses');
+  // Get all businesses with optional location filter
+  getAll: async (locationFilter?: LocationFilter, search?: string) => {
+    const params = new URLSearchParams();
+    
+    if (locationFilter) {
+      params.append('lat', locationFilter.lat.toString());
+      params.append('lng', locationFilter.lng.toString());
+      params.append('radius', locationFilter.radius.toString());
+    }
+    
+    if (search) {
+      params.append('search', search);
+    }
+
+    const response = await api.get<Business[]>('/businesses', { params });
     return response.data;
   },
 
@@ -21,13 +33,13 @@ export const businessApi = {
   },
 
   // Create new business
-  create: async (business: Omit<Business, '_id' | 'createdAt'>) => {
+  create: async (business: BusinessCreate) => {
     const response = await api.post<Business>('/businesses', business);
     return response.data;
   },
 
   // Update business
-  update: async (id: string, business: Partial<Business>) => {
+  update: async (id: string, business: Partial<BusinessCreate>) => {
     const response = await api.put<Business>(`/businesses/${id}`, business);
     return response.data;
   },
@@ -35,6 +47,22 @@ export const businessApi = {
   // Delete business
   delete: async (id: string) => {
     await api.delete(`/businesses/${id}`);
+  },
+
+  // Get user's current location
+  getCurrentLocation: async (): Promise<GeolocationPosition> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported by your browser'));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        position => resolve(position),
+        error => reject(error),
+        { enableHighAccuracy: true }
+      );
+    });
   }
 };
 

@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { businessApi } from '../api';
+import { BusinessCreate } from '../types';
 
-interface FormData {
-  name: string;
-  description: string;
-  category: string;
-  location: string;
+interface UserCoordinates {
+  latitude: number;
+  longitude: number;
 }
+
+type FormData = Omit<BusinessCreate, 'coordinates'>;
 
 const initialFormData: FormData = {
   name: '',
@@ -21,6 +22,7 @@ const AddBusinessForm = () => {
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userLocation, setUserLocation] = useState<UserCoordinates | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -41,12 +43,41 @@ const AddBusinessForm = () => {
         throw new Error('All fields are required');
       }
 
-      const newBusiness = await businessApi.create(formData);
+      const businessData: BusinessCreate = {
+        ...formData,
+        coordinates: userLocation ? {
+          type: 'Point',
+          coordinates: [userLocation.longitude, userLocation.latitude] // MongoDB expects [longitude, latitude]
+        } : undefined
+      };
+
+      const newBusiness = await businessApi.create(businessData);
       navigate(`/business/${newBusiness._id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create business');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleGetLocation = async () => {
+    try {
+      const position = await businessApi.getCurrentLocation();
+      const coords = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      };
+      setUserLocation(coords);
+      
+      // Set the location field to the coordinates
+      const address = `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
+      setFormData(prev => ({
+        ...prev,
+        location: address
+      }));
+    } catch (error) {
+      setError('Failed to get your location. Please enter address manually.');
+      console.error('Location error:', error);
     }
   };
 
@@ -107,15 +138,30 @@ const AddBusinessForm = () => {
         <label htmlFor="location" className="block text-gray-700 font-medium mb-2">
           Location
         </label>
-        <input
-          type="text"
-          id="location"
-          name="location"
-          value={formData.location}
-          onChange={handleChange}
-          className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          required
-        />
+        <div className="space-y-2">
+          <input
+            type="text"
+            id="location"
+            name="location"
+            value={formData.location}
+            onChange={handleChange}
+            className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter business address"
+            required
+          />
+          <button
+            type="button"
+            onClick={handleGetLocation}
+            className="text-sm text-blue-600 hover:text-blue-700"
+          >
+            📍 Use my current location
+          </button>
+          {userLocation && (
+            <div className="text-sm text-gray-600">
+              Using coordinates: {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex justify-end gap-4">

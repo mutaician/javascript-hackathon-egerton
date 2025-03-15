@@ -1,9 +1,44 @@
 import Business from '../models/Business.js';
+import nodeGeocoder from 'node-geocoder';
 
-// Get all businesses
+// Initialize geocoder
+const geocoder = nodeGeocoder({
+  provider: 'openstreetmap',
+  formatter: null
+});
+
+// Get businesses with optional location-based filtering
 export const getBusinesses = async (req, res) => {
   try {
-    const businesses = await Business.find().sort({ createdAt: -1 });
+    const { lat, lng, radius, search } = req.query;
+
+    // Base query
+    let query = {};
+
+    // Add location-based filtering if coordinates are provided
+    if (lat && lng && radius) {
+      query.coordinates = {
+        $near: {
+          $geometry: {
+            type: 'Point',
+            coordinates: [parseFloat(lng), parseFloat(lat)]
+          },
+          $maxDistance: parseInt(radius) * 1000 // Convert km to meters
+        }
+      };
+    }
+
+    // Add text search if provided
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { category: { $regex: search, $options: 'i' } },
+        { location: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const businesses = await Business.find(query).sort({ createdAt: -1 });
     res.status(200).json(businesses);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -23,10 +58,27 @@ export const getBusiness = async (req, res) => {
   }
 };
 
-// Create business
+// Create business with geocoding
 export const createBusiness = async (req, res) => {
   try {
-    const business = new Business(req.body);
+    const businessData = req.body;
+
+    // Only geocode if coordinates are not provided
+    if (!businessData.coordinates) {
+      const geoResults = await geocoder.geocode(businessData.location);
+
+      if (!geoResults || geoResults.length === 0) {
+        throw new Error('Unable to geocode location');
+      }
+
+      // Add coordinates to business data
+      businessData.coordinates = {
+        type: 'Point',
+        coordinates: [geoResults[0].longitude, geoResults[0].latitude]
+      };
+    }
+
+    const business = new Business(businessData);
     const savedBusiness = await business.save();
     res.status(201).json(savedBusiness);
   } catch (error) {
@@ -34,14 +86,31 @@ export const createBusiness = async (req, res) => {
   }
 };
 
-// Update business
+// Update business with geocoding
 export const updateBusiness = async (req, res) => {
   try {
+    const businessData = req.body;
+
+    // Only geocode if location is being updated and coordinates aren't provided
+    if (businessData.location && !businessData.coordinates) {
+      const geoResults = await geocoder.geocode(businessData.location);
+      
+      if (!geoResults || geoResults.length === 0) {
+        throw new Error('Unable to geocode location');
+      }
+
+      businessData.coordinates = {
+        type: 'Point',
+        coordinates: [geoResults[0].longitude, geoResults[0].latitude]
+      };
+    }
+
     const business = await Business.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      businessData,
       { new: true, runValidators: true }
     );
+
     if (!business) {
       return res.status(404).json({ message: 'Business not found' });
     }

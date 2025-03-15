@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Business } from '../types';
+import { Business, LocationFilter as LocationFilterType } from '../types';
 import { businessApi } from '../api';
 import SearchFilters from './SearchFilters';
+import LocationFilter from './LocationFilter';
+import BusinessCard from './BusinessCard';
 
 const BusinessList: React.FC = () => {
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -11,11 +13,12 @@ const BusinessList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
+  const [locationFilter, setLocationFilter] = useState<LocationFilterType>();
 
   useEffect(() => {
     const fetchBusinesses = async () => {
       try {
-        const data = await businessApi.getAll();
+        const data = await businessApi.getAll(locationFilter, searchTerm);
         setBusinesses(data);
         setError(null);
       } catch (err) {
@@ -27,7 +30,7 @@ const BusinessList: React.FC = () => {
     };
 
     fetchBusinesses();
-  }, []);
+  }, [locationFilter, searchTerm]);
 
   // Extract unique categories and locations
   const categories = useMemo(() => {
@@ -62,6 +65,7 @@ const BusinessList: React.FC = () => {
     setSearchTerm('');
     setSelectedCategory('');
     setSelectedLocation('');
+    setLocationFilter(undefined);
   };
 
   if (isLoading) {
@@ -85,6 +89,7 @@ const BusinessList: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <LocationFilter onLocationFilter={setLocationFilter} />
       <SearchFilters
         onSearchChange={setSearchTerm}
         onCategoryFilter={setSelectedCategory}
@@ -109,23 +114,11 @@ const BusinessList: React.FC = () => {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredBusinesses.map((business) => (
-            <div
+            <BusinessCard
               key={business._id}
-              className="border rounded-lg p-4 hover:shadow-lg transition-shadow"
-            >
-              <h2 className="text-xl font-semibold mb-2">{business.name}</h2>
-              <p className="text-gray-600 mb-2">{business.description}</p>
-              <div className="text-sm text-gray-500 mb-3">
-                <p>Category: {business.category}</p>
-                <p>Location: {business.location}</p>
-              </div>
-              <Link
-                to={`/business/${business._id}`}
-                className="text-blue-600 hover:underline"
-              >
-                View Details
-              </Link>
-            </div>
+              business={business}
+              locationFilter={locationFilter}
+            />
           ))}
         </div>
       )}
